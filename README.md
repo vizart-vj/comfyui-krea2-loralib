@@ -81,7 +81,3 @@ Category folders are created only when at least one LoRA is downloaded into them
 
 - ComfyUI
 - `huggingface_hub` is **not** required — the node fetches LoRA files directly via HTTP
-
-## 📄 License
-
-MIT

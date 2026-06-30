@@ -15,9 +15,17 @@ app.registerExtension({
             node._activeCategory = null;
             node._searchQuery = "";
 
+            const saved = localStorage.getItem("krea2_loralib");
+            const savedVer = localStorage.getItem("krea2_loralib_v");
+            if (saved && savedVer !== "2") {
+                localStorage.removeItem("krea2_loralib");
+                localStorage.setItem("krea2_loralib_v", "2");
+            } else if (saved) {
+                try { node._myLoras = JSON.parse(saved); } catch (e) {}
+            }
+
             const configWidget = node.widgets.find((w) => w.name === "loras_config");
             if (configWidget) {
-                configWidget.serialize = false;
                 configWidget.inputEl.style.height = "1px";
                 configWidget.inputEl.style.minHeight = "1px";
                 configWidget.inputEl.style.padding = "0";
@@ -31,13 +39,29 @@ app.registerExtension({
             }
 
             function syncConfig() {
+                if (node._loraIndex) {
+                    for (const l of node._myLoras) {
+                        if (!l.category) {
+                            for (const [cat, loras] of Object.entries(node._loraIndex)) {
+                                if (loras.find((x) => x.filename === l.filename)) {
+                                    l.category = cat;
+                                    break;
+                                }
+                            }
+                            if (!l.category) l.category = "Other";
+                        }
+                    }
+                }
                 const data = node._myLoras.map((l) => ({
                     filename: l.filename,
+                    name: l.name,
+                    preview: l.preview,
                     category: l.category,
                     trigger: l.trigger,
                     strength: l.strength,
                     enabled: l.enabled,
                 }));
+                localStorage.setItem("krea2_loralib", JSON.stringify(data));
                 if (configWidget) configWidget.value = JSON.stringify(data);
             }
 
@@ -143,7 +167,7 @@ app.registerExtension({
             const progressEl = container.querySelector(".k2l-progress");
 
             let mySearch = "";
-            let myActiveCat = null;
+            let myActiveCat = "All";
 
             container.querySelectorAll(".k2l-topbtn").forEach((btn) => {
                 btn.addEventListener("click", () => {
@@ -163,6 +187,27 @@ app.registerExtension({
                     return;
                 }
 
+                if (node._loraIndex) {
+                    let changed = false;
+                    for (const l of node._myLoras) {
+                        if (!l.category) {
+                            for (const [cat, loras] of Object.entries(node._loraIndex)) {
+                                if (loras.find((x) => x.filename === l.filename)) {
+                                    l.category = cat;
+                                    changed = true;
+                                    break;
+                                }
+                            }
+                            if (!l.category) { l.category = "Other"; changed = true; }
+                        }
+                        if (!l.name || l.name === "safetensors") {
+                            l.name = l.filename.replace(".safetensors", "").split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+                            changed = true;
+                        }
+                    }
+                    if (changed) syncConfig();
+                }
+
                 const catCounts = {};
                 for (const l of node._myLoras) {
                     const c = l.category || "Other";
@@ -170,9 +215,11 @@ app.registerExtension({
                 }
                 const cats = Object.keys(catCounts).sort();
 
-                if (!myActiveCat || !catCounts[myActiveCat]) myActiveCat = null;
+                if (!catCounts[myActiveCat] && myActiveCat !== "All") myActiveCat = "All";
 
-                myCatsEl.innerHTML = cats
+                const totalCount = node._myLoras.length;
+                const allTab = `<div class="k2l-cat-tab ${myActiveCat === "All" ? "active" : ""}" data-c="All">All (${totalCount})</div>`;
+                myCatsEl.innerHTML = allTab + cats
                     .map(
                         (c) =>
                             `<div class="k2l-cat-tab ${myActiveCat === c ? "active" : ""}" data-c="${c}">${c} (${catCounts[c]})</div>`
@@ -181,14 +228,14 @@ app.registerExtension({
 
                 myCatsEl.querySelectorAll(".k2l-cat-tab").forEach((t) => {
                     t.onclick = () => {
-                        myActiveCat = myActiveCat === t.dataset.c ? null : t.dataset.c;
+                        myActiveCat = t.dataset.c;
                         renderMyLoras();
                     };
                 });
 
                 const q = mySearch.toLowerCase();
                 const filtered = node._myLoras.filter((l) => {
-                    if (myActiveCat && (l.category || "Other") !== myActiveCat) return false;
+                    if (myActiveCat !== "All" && (l.category || "Other") !== myActiveCat) return false;
                     if (q && !l.name.toLowerCase().includes(q) && !l.trigger.toLowerCase().includes(q)) return false;
                     return true;
                 });
@@ -415,18 +462,36 @@ app.registerExtension({
                     node._loraIndex = await r.json();
                     const cats = Object.keys(node._loraIndex);
 
-                    const myFns = new Set(node._myLoras.map((l) => l.filename));
+                    const myMap = new Map(node._myLoras.map((l) => [l.filename, l]));
                     for (const cat of cats) {
                         for (const lora of node._loraIndex[cat]) {
-                            if (lora.downloaded && !myFns.has(lora.filename)) {
+                            if (!lora.downloaded) continue;
+                            const existing = myMap.get(lora.filename);
+                            if (existing) {
+                                existing.category = existing.category || cat;
+                                existing.name = existing.name || lora.name;
+                                existing.trigger = existing.trigger || lora.trigger;
+                                existing.preview = existing.preview || lora.preview;
+                            } else {
                                 node._myLoras.push({
                                     ...lora,
                                     category: cat,
                                     strength: 1.0,
                                     enabled: true,
                                 });
-                                myFns.add(lora.filename);
+                                myMap.set(lora.filename, node._myLoras[node._myLoras.length - 1]);
                             }
+                        }
+                    }
+                    for (const l of node._myLoras) {
+                        if (!l.category) {
+                            for (const cat of cats) {
+                                if (node._loraIndex[cat].find((x) => x.filename === l.filename)) {
+                                    l.category = cat;
+                                    break;
+                                }
+                            }
+                            if (!l.category) l.category = "Other";
                         }
                     }
                     syncConfig();
@@ -471,12 +536,6 @@ app.registerExtension({
                 if (toDl.length) downloadBatch(toDl);
                 else progressEl.textContent = "All in category already downloaded";
             };
-
-            if (configWidget && configWidget.value && configWidget.value !== "[]") {
-                try {
-                    node._myLoras = JSON.parse(configWidget.value);
-                } catch (e) {}
-            }
 
             renderMyLoras();
             loadIndex();
