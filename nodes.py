@@ -38,6 +38,20 @@ class Krea2LoraLib:
         "Use the gallery widget to select styles, adjust strength, and toggle enable/disable."
     )
 
+    def _find_lora_on_disk(self, filename, category=""):
+        if category:
+            p = get_lora_path(category, filename)
+            if os.path.exists(p):
+                return p
+        base = folder_paths.get_folder_paths("loras")[0]
+        krea2_root = os.path.join(base, KREA2_BASE)
+        if os.path.isdir(krea2_root):
+            for cat in os.listdir(krea2_root):
+                p = os.path.join(krea2_root, cat, filename)
+                if os.path.isfile(p):
+                    return p
+        return None
+
     def apply_loras(self, model, clip, loras_config):
         try:
             selected = json.loads(loras_config) if loras_config.strip() else []
@@ -55,11 +69,11 @@ class Krea2LoraLib:
             strength = entry.get("strength", 1.0)
             trigger = entry.get("trigger", "")
 
-            if not filename or not category:
+            if not filename:
                 continue
 
-            lora_path = get_lora_path(category, filename)
-            if not os.path.exists(lora_path):
+            lora_path = self._find_lora_on_disk(filename, category)
+            if not lora_path:
                 print(f"[Krea2LoraLib] LoRA not found, skipping: {filename}")
                 continue
 

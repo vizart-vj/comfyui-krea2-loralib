@@ -200,7 +200,11 @@ app.registerExtension({
                             }
                             if (!l.category) { l.category = "Other"; changed = true; }
                         }
-                        if (!l.name || l.name === "safetensors") {
+                        const idxEntry = findLoraAnywhere(l.filename);
+                        if (idxEntry) {
+                            if (!l.trigger || l.trigger !== idxEntry.trigger) { l.trigger = idxEntry.trigger; changed = true; }
+                            if (!l.name || l.name === "safetensors") { l.name = idxEntry.name; changed = true; }
+                        } else if (!l.name || l.name === "safetensors") {
                             l.name = l.filename.replace(".safetensors", "").split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
                             changed = true;
                         }
@@ -468,9 +472,9 @@ app.registerExtension({
                             if (!lora.downloaded) continue;
                             const existing = myMap.get(lora.filename);
                             if (existing) {
-                                existing.category = existing.category || cat;
-                                existing.name = existing.name || lora.name;
-                                existing.trigger = existing.trigger || lora.trigger;
+                                existing.category = cat;
+                                existing.name = lora.name;
+                                existing.trigger = lora.trigger;
                                 existing.preview = existing.preview || lora.preview;
                             } else {
                                 node._myLoras.push({

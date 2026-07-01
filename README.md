@@ -4,9 +4,6 @@ A ComfyUI custom node for browsing, downloading, and applying [Krea 2 Style LoRA
 
 **1503 style LoRAs** organized into 7 categories, trained on [fal](https://fal.ai) by [ilkerzgi](https://huggingface.co/ilkerzgi).
 
-![screenshot](ex1.png)
-![screenshot](ex2.png)
-
 ## Features
 
 - **Gallery** — browse all 1503 styles with preview images, organized by category
